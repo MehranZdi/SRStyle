@@ -1,5 +1,15 @@
 import torch
 import torch.nn as nn
+import adain
+
+
+class AdaINLayer(nn.Module):
+    def __init__(self, num_features):
+        super().__init__()
+        self.num_features = num_features
+
+    def forward(self, x, style_features):
+        return adain.AdaIN()(x, style_features)
 
 
 class ConvBlock(nn.Module):
