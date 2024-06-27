@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn as nn
 
@@ -16,7 +15,6 @@ class Block(nn.Module):
                 bias=True,
                 padding_mode="reflect",
             ),
-            nn.InstanceNorm2d(out_channels),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
