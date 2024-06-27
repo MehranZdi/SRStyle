@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from adain_model import AdaIN  # Assuming AdaIN is defined in the imported module
+from adain_model import AdaIN
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, down=True, use_act=True, use_in=False, **kwargs):
