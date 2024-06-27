@@ -98,7 +98,7 @@ class Decoder(nn.Module):
         return h
 
 
-class Model(nn.Module):
+class AdaIN(nn.Module):
     def __init__(self):
         super().__init__()
         self.vgg_encoder = VGGEncoder()
