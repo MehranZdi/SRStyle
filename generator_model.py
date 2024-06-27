@@ -92,11 +92,11 @@ def load_adain_weights(adain, path):
 def test():
     img_channels = 3
     img_size = 256
-    style_dim = 512  # Example style dimension
+    style_dim = 512
     x = torch.randn((2, img_channels, img_size, img_size))
     style = torch.randn((2, style_dim))
-    adain = AdaIN(style_dim, 512)  # Example AdaIN initialization
-    load_adain_weights(adain, 'path/to/your/adain_model.pth')
+    adain = AdaIN(style_dim, 512)
+    load_adain_weights(adain, '/home/mehran/Git/SRStyle/model_state.pth')
     gen = Generator(img_channels, 9, adain=adain)
     print(gen(x, style).shape)
 
