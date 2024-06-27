@@ -3,15 +3,18 @@ import torch.nn as nn
 from adain_model import AdaIN  # Assuming AdaIN is defined in the imported module
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, down=True, use_act=True, **kwargs):
+    def __init__(self, in_channels, out_channels, down=True, use_act=True, use_in=False, **kwargs):
         super().__init__()
-        self.conv = nn.Sequential(
+        layers = [
             nn.Conv2d(in_channels, out_channels, padding_mode="reflect", **kwargs)
             if down
-            else nn.ConvTranspose2d(in_channels, out_channels, **kwargs),
-            nn.InstanceNorm2d(out_channels),
-            nn.ReLU(inplace=True) if use_act else nn.Identity(),
-        )
+            else nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
+        ]
+        if use_in:
+            layers.append(nn.InstanceNorm2d(out_channels))
+        if use_act:
+            layers.append(nn.ReLU(inplace=True))
+        self.conv = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.conv(x)
