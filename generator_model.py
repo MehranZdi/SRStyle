@@ -1,16 +1,6 @@
 import torch
 import torch.nn as nn
-import adain
-
-
-class AdaINLayer(nn.Module):
-    def __init__(self, num_features):
-        super().__init__()
-        self.num_features = num_features
-
-    def forward(self, x, style_features):
-        return adain.AdaIN()(x, style_features)
-
+from adain_model import AdaIN  # Assuming AdaIN is defined in the imported module
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, down=True, use_act=True, **kwargs):
@@ -26,22 +16,27 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
-
 class ResidualBlock(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, channels, adain):
         super().__init__()
+        self.adain = adain
         self.block = nn.Sequential(
-            ConvBlock(channels, channels, kernel_size=3, padding=1),
-            ConvBlock(channels, channels, use_act=False, kernel_size=3, padding=1),
+            ConvBlock(channels, channels, kernel_size=3, padding=1, use_in=False),
+            ConvBlock(channels, channels, use_act=False, kernel_size=3, padding=1, use_in=False),
         )
 
-    def forward(self, x):
-        return x + self.block(x)
-
+    def forward(self, x, style):
+        out = self.block[0](x)
+        out = self.adain(out, style)
+        out = self.block[1](out)
+        out = self.adain(out, style)
+        return x + out
 
 class Generator(nn.Module):
-    def __init__(self, img_channels, num_features=64, num_residuals=9):
+    def __init__(self, img_channels, num_features=64, num_residuals=9, adain):
         super().__init__()
+        self.adain1 = adain
+        self.adain2 = adain
         self.initial = nn.Sequential(
             nn.Conv2d(
                 img_channels,
@@ -51,51 +46,25 @@ class Generator(nn.Module):
                 padding=3,
                 padding_mode="reflect",
             ),
-            nn.InstanceNorm2d(num_features),
             nn.ReLU(inplace=True),
         )
         self.down_blocks = nn.ModuleList(
             [
-                ConvBlock(
-                    num_features, num_features * 2, kernel_size=3, stride=2, padding=1
-                ),
-                ConvBlock(
-                    num_features * 2,
-                    num_features * 4,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                ),
+                ConvBlock(num_features, num_features * 2, kernel_size=3, stride=2, padding=1, use_in=True),
+                ConvBlock(num_features * 2, num_features * 4, kernel_size=3, stride=2, padding=1, use_in=True),
             ]
         )
-        self.res_blocks = nn.Sequential(
-            *[ResidualBlock(num_features * 4) for _ in range(num_residuals)]
+        self.res_blocks = nn.ModuleList(
+            [ResidualBlock(num_features * 4, self.adain) for _ in range(num_residuals)]
         )
         self.up_blocks = nn.ModuleList(
             [
-                ConvBlock(
-                    num_features * 4,
-                    num_features * 2,
-                    down=False,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    output_padding=1,
-                ),
-                ConvBlock(
-                    num_features * 2,
-                    num_features * 1,
-                    down=False,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    output_padding=1,
-                ),
+                ConvBlock(num_features * 4, num_features * 2, down=False, kernel_size=3, stride=2, padding=1, output_padding=1, use_in=False),
+                ConvBlock(num_features * 2, num_features, down=False, kernel_size=3, stride=2, padding=1, output_padding=1, use_in=False),
             ]
         )
-
         self.last = nn.Conv2d(
-            num_features * 1,
+            num_features,
             img_channels,
             kernel_size=7,
             stride=1,
@@ -103,24 +72,29 @@ class Generator(nn.Module):
             padding_mode="reflect",
         )
 
-    def forward(self, x):
+    def forward(self, x, style):
         x = self.initial(x)
         for layer in self.down_blocks:
             x = layer(x)
-        x = self.res_blocks(x)
+        for res_block in self.res_blocks:
+            x = res_block(x, style)
         for layer in self.up_blocks:
             x = layer(x)
         return torch.tanh(self.last(x))
 
+def load_adain_weights(adain, path):
+    adain.load_state_dict(torch.load(path))
 
 def test():
     img_channels = 3
     img_size = 256
+    style_dim = 512  # Example style dimension
     x = torch.randn((2, img_channels, img_size, img_size))
-    gen = Generator(img_channels, 9)
-    print(gen(x).shape)
-    print(x[1][2].shape)
-
+    style = torch.randn((2, style_dim))
+    adain = AdaIN(style_dim, 512)  # Example AdaIN initialization
+    load_adain_weights(adain, 'path/to/your/adain_model.pth')
+    gen = Generator(img_channels, 9, adain=adain)
+    print(gen(x, style).shape)
 
 if __name__ == "__main__":
     test()
