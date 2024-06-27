@@ -19,7 +19,8 @@ class ConvBlock(nn.Module):
 class ResidualBlock(nn.Module):
     def __init__(self, channels, adain):
         super().__init__()
-        self.adain = adain
+        self.adain1 = adain
+        self.adain2 = adain
         self.block = nn.Sequential(
             ConvBlock(channels, channels, kernel_size=3, padding=1, use_in=False),
             ConvBlock(channels, channels, use_act=False, kernel_size=3, padding=1, use_in=False),
