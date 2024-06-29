@@ -4,6 +4,7 @@ from torchvision import transforms
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 1
+EPOCHS = 5
 LEARNING_RATE = 1e-5
 LAMBDA_CYCLE = 10
 NUM_WORKERS = 4
