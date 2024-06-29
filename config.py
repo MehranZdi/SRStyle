@@ -11,6 +11,10 @@ NUM_WORKERS = 4
 NUM_EPOCHS = 5
 LOAD_MODEL = False
 SAVE_MODEL = True
+CHECKPOINT_GEN_L = "genl.pth.tar"
+CHECKPOINT_GEN_H = "genh.pth.tar"
+CHECKPOINT_CRITIC_L = "criticl.pth.tar"
+CHECKPOINT_CRITIC_H = "critich.pth.tar"
 
 transform = transforms.Compose([
     transforms.Resize((256, 256)),  # Resize images to 256x256
