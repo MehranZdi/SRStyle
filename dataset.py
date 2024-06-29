@@ -1,8 +1,7 @@
 import os
 import random
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
+from torch.utils.data import Dataset
 
 
 class ImageDataset(Dataset):
