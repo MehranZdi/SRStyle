@@ -18,7 +18,6 @@ CHECKPOINT_CRITIC_H = "critich.pth.tar"
 
 transform = transforms.Compose([
     transforms.Resize((256, 256)),  # Resize images to 256x256
-    transforms.RandomCrop(256),     # Crop randomly to 256x256
     transforms.ToTensor(),          # Convert images to PyTorch tensors
     transforms.Normalize(mean=[0.485, 0.456, 0.406],  # Normalize using ImageNet stats
                          std=[0.229, 0.224, 0.225]),
