@@ -14,7 +14,7 @@ class ImageDataset(Dataset):
         self.transform = transform
 
     def __len__(self):
-        return max(len(self.hr_images, self.lr_images))
+        return min(len(self.hr_images), len(self.lr_images))
 
     def __getitem__(self, idx):
         hr_image_path = random.choice(self.hr_images)
