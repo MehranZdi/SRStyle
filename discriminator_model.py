@@ -47,7 +47,7 @@ class Discriminator(nn.Module):
         layers.append(
             nn.Conv2d(3,
                 in_channels,
-                1,
+                feature=1,
                 kernel_size=4,
                 stride=1,
                 padding=1,
