@@ -23,8 +23,4 @@ class ImageDataset(Dataset):
         hr_image = Image.open(hr_image_path).convert('RGB')
         lr_image = Image.open(lr_image_path).convert('RGB')
 
-        if self.transform:
-            hr_image = self.transform(hr_image)
-            lr_image = self.transform(lr_image)
-
         return lr_image, hr_image
