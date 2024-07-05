@@ -1,127 +1,113 @@
 import torch
 import torch.nn as nn
+
+import config
 from adain_model import AdaIN
 
 
+adain_model = AdaIN()
+adain_model.load_state_dict(torch.load('path/to/pretrained_adain.pth'))
+adain_model.eval()
+adain_model.to(config.DEVICE)
+
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, down=True, use_act=True, use_in=False, **kwargs):
-        super().__init__()
-        layers = [
-            nn.Conv2d(in_channels, out_channels, padding_mode="reflect", **kwargs)
-            if down
-            else nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
-        ]
-        if use_in:
-            layers.append(nn.InstanceNorm2d(out_channels))
-        if use_act:
-            layers.append(nn.ReLU(inplace=True))
-        self.conv = nn.Sequential(*layers)
+    def __init__(self, in_channels, out_channels, down=True, use_act=True, use_in=True):
+        super(ConvBlock, self).__init__()
+        if down:
+            self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1)
+        else:
+            self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.use_in = use_in
+        self.in_norm = nn.InstanceNorm2d(out_channels) if use_in else None
+        self.use_act = use_act
+        self.act = nn.ReLU(inplace=True) if use_act else None
 
     def forward(self, x):
-        return self.conv(x)
-
-
-class ResidualBlock(nn.Module):
-    def __init__(self, channels, adain):
-        super().__init__()
-        self.adain = adain
-        self.conv1 = ConvBlock(channels, channels, kernel_size=3, padding=1, use_in=False)
-        self.conv2 = ConvBlock(channels, channels, use_act=False, kernel_size=3, padding=1, use_in=False)
-
-    def forward(self, x, content_features, style_features):
-        out = self.conv1(x)
-        out = adain(out, style_features)  # Apply AdaIN using style features
-        out = self.conv2(out)
-        out = adain(out, style_features)  # Apply AdaIN using style features
-        return x + out
-
-
-class Generator(nn.Module):
-    def __init__(self, adain, img_channels, num_features=64, num_residuals=9):
-        super().__init__()
-        self.adain = AdaIN()
-        self.initial = nn.Sequential(
-            nn.Conv2d(
-                img_channels,
-                num_features,
-                kernel_size=7,
-                stride=1,
-                padding=3,
-                padding_mode="reflect",
-            ),
-            nn.InstanceNorm2d(num_features),
-            nn.ReLU(inplace=True),
-        )
-        self.down_blocks = nn.ModuleList(
-            [
-                ConvBlock(num_features, num_features * 2, kernel_size=3, stride=2, padding=1, use_in=True),
-                ConvBlock(num_features * 2, num_features * 4, kernel_size=3, stride=2, padding=1, use_in=True),
-                # ConvBlock(num_features * 2, num_features * 2, kernel_size=3, stride=2, padding=1, use_in=True),
-            ]
-        )
-        self.res_blocks = nn.ModuleList(
-            [ResidualBlock(num_features * 4, adain) for _ in range(num_residuals)]
-        )
-        self.up_blocks = nn.ModuleList(
-            [
-                ConvBlock(num_features * 4, num_features * 2, down=False, kernel_size=3, stride=2, padding=1,
-                          output_padding=1, use_in=True),
-                ConvBlock(num_features * 2, num_features, down=False, kernel_size=3, stride=2, padding=1,
-                          output_padding=1, use_in=True),
-            ]
-        )
-        self.last = nn.Conv2d(
-            num_features,
-            img_channels,
-            kernel_size=7,
-            stride=1,
-            padding=3,
-            padding_mode="reflect",
-        )
-
-    def forward(self, x, content_img, style_img):
-        # Extract features with VGGEncoder (512 channels)
-        content_features = self.adain.vgg_encoder(content_img, output_last_feature=True)
-        style_features = self.adain.vgg_encoder(style_img, output_last_feature=True)
-        print(f'Content features shape: {content_features.shape}')
-        print(f'Style features shape: {style_features.shape}')
-
-        print(f'Initial input shape: {x.shape}')
-        x = self.initial(x)
-        print(f'After initial layer: {x.shape}')
-
-        for i, layer in enumerate(self.down_blocks):
-            x = layer(x)
-            print(f'After down block {i}: {x.shape}')
-
-        for i, res_block in enumerate(self.res_blocks):
-            x = res_block(x, content_features, style_features)
-            print(f'After residual block {i}: {x.shape}')
-
-        for i, layer in enumerate(self.up_blocks):
-            x = layer(x)
-            print(f'After up block {i}: {x.shape}')
-
-        x = torch.tanh(self.last(x))
-        print(f'Final output shape: {x.shape}')
+        x = self.conv(x)
+        if self.use_in:
+            x = self.in_norm(x)
+        if self.use_act:
+            x = self.act(x)
         return x
 
 
-def load_adain_weights(adain, path):
-    adain.load_state_dict(torch.load(path))
+class ResidualBlock(nn.Module):
+    def __init__(self, channels):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+        self.in1 = nn.InstanceNorm2d(channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+        self.in2 = nn.InstanceNorm2d(channels)
 
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.in1(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.in2(out)
+        return out + residual
+
+
+class Generator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6):
+        super(Generator, self).__init__()
+        self.initial = nn.Sequential(
+            nn.Conv2d(input_nc, ngf, kernel_size=7, padding=3),
+            nn.InstanceNorm2d(ngf),
+            nn.ReLU(inplace=True),
+        )
+
+        # Downsampling
+        self.down1 = nn.Sequential(
+            nn.Conv2d(ngf, ngf * 2, kernel_size=3, stride=2, padding=1),
+            nn.InstanceNorm2d(ngf * 2),
+            nn.ReLU(inplace=True),
+        )
+        self.down2 = nn.Sequential(
+            nn.Conv2d(ngf * 2, ngf * 4, kernel_size=3, stride=2, padding=1),
+            nn.InstanceNorm2d(ngf * 4),
+            nn.ReLU(inplace=True),
+        )
+
+        # Residual blocks
+        self.res_blocks = nn.Sequential(*[ResidualBlock(ngf * 4) for _ in range(n_blocks)])
+
+        # Upsampling
+        self.up1 = nn.Sequential(
+            nn.ConvTranspose2d(ngf * 4, ngf * 2, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.InstanceNorm2d(ngf * 2),
+            nn.ReLU(inplace=True),
+        )
+        self.up2 = nn.Sequential(
+            nn.ConvTranspose2d(ngf * 2, ngf, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.InstanceNorm2d(ngf),
+            nn.ReLU(inplace=True),
+        )
+
+        self.final = nn.Sequential(
+            nn.Conv2d(ngf, output_nc, kernel_size=7, padding=3),
+            nn.Tanh(),
+        )
+
+    def forward(self, input, style_img):
+        x = self.initial(input)
+        x = self.down1(x)
+        x = self.down2(x)
+        x = self.res_blocks(x)
+        x = self.up1(x)
+        x = self.up2(x)
+        content_features = self.final(x)
+        styled_output = adain_model.generate(content_features, style_img)
+        return styled_output
 
 def test():
     img_channels = 3
     img_size = 256
     x = torch.randn((2, img_channels, img_size, img_size))
-    content_images = torch.randn((2, img_channels, img_size, img_size))
-    print(content_images.shape)
-    style_images = torch.randn((2, img_channels, img_size, img_size))
-    adain = AdaIN()
-    load_adain_weights(adain, '/content/model_state.pth')
-    gen = Generator(adain, img_channels, 128)
-    print(gen(x, content_images, style_images).shape)
+    gen = Generator(img_channels, 9)
+    print(gen(x).shape)
 
 
 if __name__ == "__main__":
